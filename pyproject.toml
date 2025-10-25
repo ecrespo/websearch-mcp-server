@@ -1,0 +1,13 @@
+[project]
+name = "websearch-mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "loguru>=0.7.3",
+    "mcp[cli]>=1.19.0",
+    "python-decouple>=3.8",
+    "rich>=14.2.0",
+    "tavily-python>=0.7.12",
+]
