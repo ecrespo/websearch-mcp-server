@@ -75,6 +75,49 @@ To connect, use an MCP client or inspector that supports `streamable-http`. See 
 
 > Security note: The server binds to `0.0.0.0` by default. Consider firewall rules or changing the host if exposing beyond localhost.
 
+## Using with Claude Desktop
+
+You can use this MCP server directly from Claude Desktop via the Streamable HTTP transport.
+
+1) Start the server (ensure your `.env` has `tavily_api`):
+
+```bash
+python server.py
+```
+
+2) Create or edit Claude Desktop's config file at the following path for your OS:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+3) Add an MCP server entry pointing to this server:
+
+```json
+{
+  "mcpServers": {
+    "websearch": {
+      "type": "http",
+      "transport": "streamable-http",
+      "url": "http://127.0.0.1:9000",
+      "description": "Local WebSearch MCP server (Tavily-backed)"
+    }
+  }
+}
+```
+
+Notes:
+- Claude Desktop 0.7+ supports `streamable-http` and automatically sets the required `mcp-session-id` header.
+- If you changed the host/port in `server.py`, update the `url` accordingly.
+
+4) Restart Claude Desktop. Then open Settings ➜ Tools (or MCP Servers) to verify `websearch` is listed. In a new chat, Claude should be able to call the `web_search` tool when relevant.
+
+Troubleshooting:
+- Ensure the server is running and reachable at the configured URL.
+- Verify `tavily_api` is set (see Configuration above).
+- Check `logs/app.log` for server-side errors.
+- Firewalls/VPNs can block localhost ports; allow or switch to a different port.
+
 ## Scripts and Entry Points
 
 - Application entry point: `server.py`

@@ -8,7 +8,7 @@ This document captures project-specific practices and gotchas to accelerate deve
 
 - Runtime and tooling
   - Python: requires `>= 3.13` (see `pyproject.toml`).
-  - Dependencies: declared in `pyproject.toml` (`loguru`, `mcp[cli]`, `python-decouple`, `rich`, `tavily-python`).
+  - Dependencies: declared in `pyproject.toml` (`httpx`, `loguru`, `mcp[cli]`, `python-decouple`, `rich`, `tavily-python`).
   - Optional: `uv` is present (`uv.lock`). If available, prefer `uv` for reproducible, fast installs.
 
 - Environment configuration
@@ -29,7 +29,7 @@ This document captures project-specific practices and gotchas to accelerate deve
     python -m venv .venv
     source .venv/bin/activate
     python -m pip install -U pip
-    python -m pip install loguru mcp[cli] python-decouple rich tavily-python
+    python -m pip install loguru mcp[cli] python-decouple rich tavily-python httpx
     ```
 
 - Local configuration
@@ -47,6 +47,77 @@ This document captures project-specific practices and gotchas to accelerate deve
     python server.py
     ```
   - Connect using your MCP client/inspector of choice that supports `streamable-http`. See the `mcp[cli]` docs for details on connecting to a running endpoint.
+
+#### Using the included MCP HTTP client
+
+- A simple HTTP client is provided at `mcp_client_websearch.py`. It uses the Streamable HTTP transport and sets the required `mcp-session-id` header automatically.
+
+- Quick start:
+  1) Start the server in a terminal:
+     ```bash
+     python server.py
+     ```
+  2) In another terminal, run the client:
+     ```bash
+     python mcp_client_websearch.py
+     ```
+     By default, it connects to `127.0.0.1:9000` and issues a sample `web_search` request.
+
+- Customizing host/port:
+  - Edit the `if __name__ == "__main__":` block in `mcp_client_websearch.py`:
+    ```python
+    client = MCPClient(server_host="127.0.0.1", server_port=9000)
+    ```
+  - Or import `MCPClient` from the module and use it programmatically in your own scripts.
+
+- Troubleshooting:
+  - Ensure the server is running and reachable.
+  - The client requires `httpx`; install it if not present.
+  - Check logs in `logs/app.log` for server-side errors.
+
+#### Using with Claude Desktop
+
+You can connect Claude Desktop to this MCP server over the Streamable HTTP transport.
+
+1) Start the server (ensure your `.env` has `tavily_api`):
+
+```bash
+python server.py
+```
+
+2) Edit Claude Desktop's config file (per OS):
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+3) Add an MCP server entry:
+
+```json
+{
+  "mcpServers": {
+    "websearch": {
+      "type": "http",
+      "transport": "streamable-http",
+      "url": "http://127.0.0.1:9000",
+      "description": "Local WebSearch MCP server (Tavily-backed)"
+    }
+  }
+}
+```
+
+Notes:
+- Claude Desktop 0.7+ supports `streamable-http` and automatically sets the required `mcp-session-id` header.
+- If you changed the host/port in `server.py`, update the `url` accordingly.
+- The server binds to `0.0.0.0:9000` by default; you can change it in `server.py`.
+
+4) Restart Claude Desktop and verify the `websearch` tool appears under Settings ➜ Tools (or MCP Servers). In a new chat, Claude should call `web_search` when relevant.
+
+Troubleshooting:
+- Ensure the server is running and reachable at the configured URL.
+- Verify `tavily_api` is set (see Local configuration).
+- Check `logs/app.log` for server-side errors.
+- Firewalls/VPNs can block localhost ports; allow or change the port.
 
 - Logging
   - Centralized via `loguru_config.py`.
@@ -76,11 +147,13 @@ This document captures project-specific practices and gotchas to accelerate deve
        ```
 
 - Running existing tests (validated)
-  - Verified in this session:
+  - Verified commands:
     ```bash
     python tests/test_temp_unittest_demo.py -v
+    python tests/test_demo_sample.py -v
+    python tests/test_project_metadata.py -v
     ```
-    This executes simple smoke tests that check the repository README and confirm `server.py` defines the `web_search` tool.
+    These execute simple smoke/metadata tests that check the repository README and confirm `server.py` defines the `web_search` tool.
 
 - Adding new tests
   - Keep tests pure and fast; avoid real Tavily calls.
@@ -144,7 +217,7 @@ This document captures project-specific practices and gotchas to accelerate deve
   ```bash
   python -m venv .venv && source .venv/bin/activate
   python -m pip install -U pip
-  python -m pip install loguru mcp[cli] python-decouple rich tavily-python
+  python -m pip install loguru mcp[cli] python-decouple rich tavily-python httpx
   ```
 - Configure env:
   ```bash

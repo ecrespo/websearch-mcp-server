@@ -9,7 +9,8 @@ from typing import List,Dict
 mcp = FastMCP(
     "WebSearch",
     host="0.0.0.0",
-    port=9000
+    port=9000,
+    json_response=True
 )
 client = TavilyClient(api_key=TAVILY_API)
 
