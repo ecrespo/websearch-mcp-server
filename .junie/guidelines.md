@@ -9,13 +9,13 @@ This document captures project-specific practices and gotchas to accelerate deve
 - Runtime and tooling
   - Python: requires `>= 3.13` (see `pyproject.toml`).
   - Dependencies (declared in `pyproject.toml`):
-    - `authlib`, `fastapi`, `httpx`, `loguru`, `mcp[cli]`, `python-decouple`, `rich`, `sse-starlette`, `tavily-python`, `uvicorn[standard]`.
+    - `fastapi`, `httpx`, `loguru`, `mcp[cli]`, `python-decouple`, `rich`, `sse-starlette`, `tavily-python`, `uvicorn[standard]`.
   - Optional: `uv` is present (`uv.lock`). If available, prefer `uv` for reproducible, fast installs.
 
 - Environment configuration
   - Secrets and config are loaded via `python-decouple` in `config.py`.
   - Required at startup (validated in `settings.validate()`):
-    - `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_AUDIENCE`
+    - `LOCAL_TOKEN` — a secure token for authentication (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
     - `TAVILY_API_KEY`
   - Useful optional settings with defaults (see `config.py`):
     - `MCP_SERVER_HOST` (default: `0.0.0.0`)
@@ -25,12 +25,8 @@ This document captures project-specific practices and gotchas to accelerate deve
     - `SESSION_TIMEOUT` (default: `3600` seconds), `SESSION_CLEANUP_INTERVAL` (default: `300` seconds)
   - Example `.env` (project root):
     ```dotenv
-    # Auth0
-    AUTH0_DOMAIN=your-tenant.auth0.com
-    AUTH0_CLIENT_ID=your_client_id
-    AUTH0_CLIENT_SECRET=your_client_secret
-    AUTH0_AUDIENCE=https://your.api.audience
-    AUTH0_ALGORITHM=RS256
+    # Local Token Configuration
+    LOCAL_TOKEN=your_generated_secure_token_here
 
     # Tavily
     TAVILY_API_KEY=your_tavily_api_key
@@ -63,7 +59,7 @@ This document captures project-specific practices and gotchas to accelerate deve
     python -m venv .venv
     source .venv/bin/activate
     python -m pip install -U pip
-    python -m pip install authlib fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
+    python -m pip install fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
     ```
 
 - Logging
@@ -89,10 +85,10 @@ This document captures project-specific practices and gotchas to accelerate deve
     - `tools/call` with params `{ name, arguments }`
 
 - Available MCP tools (registered in `server.py`):
-  - `authenticate` — obtains an Auth0 access token using Client Credentials and stores it in the session.
+  - `authenticate` — authenticates the session using the local token configured in the server and stores it in the session.
   - `web_search` — queries Tavily; requires prior authentication.
     - Arguments: `query: str` (required), `max_results: int = 5`, `search_depth: "basic"|"advanced" = "basic"`
-  - `validate_token` — validates a given JWT against Auth0 JWKS.
+  - `validate_token` — validates a given token against the local token stored in configuration.
 
 ---
 
@@ -150,7 +146,7 @@ python server.py
       "type": "http",
       "transport": "streamable-http",
       "url": "http://127.0.0.1:8000",
-      "description": "Local WebSearch MCP server (Auth0 + Tavily)"
+      "description": "Local WebSearch MCP server with Tavily"
     }
   }
 }
@@ -178,20 +174,17 @@ Notes:
     ```
 
 - Tips for writing tests
-  - Keep tests pure and fast; avoid real Tavily or Auth0 calls.
+  - Keep tests pure and fast; avoid real Tavily calls.
   - If a test imports `config.py` or `server.py`, set required env values in-process before import to avoid using real secrets:
     ```python
     import os
-    os.environ["AUTH0_DOMAIN"] = "example.auth0.com"
-    os.environ["AUTH0_CLIENT_ID"] = "dummy"
-    os.environ["AUTH0_CLIENT_SECRET"] = "dummy"
-    os.environ["AUTH0_AUDIENCE"] = "https://api.example"
+    os.environ["LOCAL_TOKEN"] = "test-token-dummy"
     os.environ["TAVILY_API_KEY"] = "dummy"
 
     import config  # safe after env vars are set
     import server
     ```
-  - To test behavior that touches `TavilyClient` or Auth0 HTTP calls, patch them:
+  - To test behavior that touches `TavilyClient`, patch it:
     ```python
     from unittest.mock import patch
 
@@ -231,8 +224,8 @@ Notes:
   - SSE heartbeats are sent every ~30s while connected.
 
 - Troubleshooting
-  - ImportError for `fastapi`, `authlib`, `loguru`, etc.: dependencies not installed. Re-run the install step.
-  - 401/permission issues when calling `web_search`: ensure you called the `authenticate` tool first and that Auth0 credentials are correct.
+  - ImportError for `fastapi`, `loguru`, etc.: dependencies not installed. Re-run the install step.
+  - 401/permission issues when calling `web_search`: ensure you called the `authenticate` tool first and that LOCAL_TOKEN is correctly configured.
   - 404 for `/session/{id}/status`: session not yet created; it is created on first `/mcp/{id}` or `/sse/{id}` call.
   - Tavily-related errors: verify `TAVILY_API_KEY` and network connectivity.
 
@@ -244,7 +237,7 @@ Notes:
   ```bash
   python -m venv .venv && source .venv/bin/activate
   python -m pip install -U pip
-  python -m pip install authlib fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
+  python -m pip install fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
   ```
 - Configure env:
   ```bash

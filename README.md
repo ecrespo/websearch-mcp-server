@@ -13,9 +13,9 @@ Note:
 - Transport: MCP `streamable-http`
 - Entry point: `server.py`
 - Core tools (registered by the server):
-  - `authenticate` — obtains an Auth0 access token using Client Credentials and stores it in the session.
+  - `authenticate` — authenticates the session using the local token configured in the server.
   - `web_search` — queries Tavily; requires prior authentication.
-  - `validate_token` — validates a given JWT against Auth0 JWKS.
+  - `validate_token` — validates a given token against the local token stored in configuration.
 - Logging: centralized via `logger.py` (Loguru + Rich)
 - Config: environment-driven via `python-decouple` in `config.py`
 
@@ -23,7 +23,7 @@ Note:
 
 - Python >= 3.13
 - Dependencies (declared in `pyproject.toml`):
-  - `authlib`, `fastapi`, `httpx`, `loguru`, `mcp[cli]`, `python-decouple`, `rich`, `sse-starlette`, `tavily-python`, `uvicorn[standard]`
+  - `fastapi`, `httpx`, `loguru`, `mcp[cli]`, `python-decouple`, `rich`, `sse-starlette`, `tavily-python`, `uvicorn[standard]`
 - Optional tooling: `uv` is supported (lockfile `uv.lock` present) for reproducible installs.
 
 ## Installation
@@ -44,7 +44,7 @@ uv sync
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
-python -m pip install authlib fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
+python -m pip install fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
 ```
 
 ## Configuration
@@ -52,14 +52,10 @@ python -m pip install authlib fastapi httpx loguru "mcp[cli]" python-decouple ri
 Secrets and configuration are loaded via `python-decouple` in `config.py`. Required variables are validated at startup (during app lifespan init). If required variables are missing, the server will log and raise.
 
 Required at startup:
-- `AUTH0_DOMAIN`
-- `AUTH0_CLIENT_ID`
-- `AUTH0_CLIENT_SECRET`
-- `AUTH0_AUDIENCE`
+- `LOCAL_TOKEN` — a secure token for authentication (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
 - `TAVILY_API_KEY`
 
 Useful optional settings with defaults:
-- `AUTH0_ALGORITHM` (default: `RS256`)
 - `MCP_SERVER_HOST` (default: `0.0.0.0`)
 - `MCP_SERVER_PORT` (default: `8000`)
 - `LOG_LEVEL` (default: `INFO`), `LOG_FILE` (default: `logs/mcp_server.log`)
@@ -69,12 +65,8 @@ Useful optional settings with defaults:
 Example `.env` (project root):
 
 ```dotenv
-# Auth0
-AUTH0_DOMAIN=your-tenant.auth0.com
-AUTH0_CLIENT_ID=your_client_id
-AUTH0_CLIENT_SECRET=your_client_secret
-AUTH0_AUDIENCE=https://your.api.audience
-AUTH0_ALGORITHM=RS256
+# Local Token Configuration
+LOCAL_TOKEN=your_generated_secure_token_here
 
 # Tavily
 TAVILY_API_KEY=your_tavily_api_key
@@ -118,10 +110,10 @@ Key endpoints:
 
 ## Available MCP tools
 
-- `authenticate` — obtains an Auth0 access token using Client Credentials and stores it in the session.
+- `authenticate` — authenticates the session using the local token configured in the server and stores it in the session.
 - `web_search` — queries Tavily; requires prior authentication.
   - Arguments: `query: str` (required), `max_results: int = 5`, `search_depth: "basic"|"advanced" = "basic"`
-- `validate_token` — validates a given JWT against Auth0 JWKS.
+- `validate_token` — validates a given token against the local token stored in configuration.
 
 ## Using the included MCP HTTP client
 
@@ -158,21 +150,31 @@ Notes:
 
 ## Using with Claude Desktop
 
-You can connect Claude Desktop to this MCP server over the Streamable HTTP transport and use the built‑in `authenticate` tool to obtain an Auth0 access token before calling `web_search`.
+You can connect Claude Desktop to this MCP server over the Streamable HTTP transport. The server uses a local token authentication system that is handled entirely server-side for security.
 
-1) Start the server (ensure your `.env` has the required settings):
+### Setup Instructions
+
+1) **Configure your server environment**
+
+Ensure your `.env` file has the required settings (see Configuration section above):
+- `LOCAL_TOKEN` — the secure authentication token (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- `TAVILY_API_KEY` — your Tavily API key
+
+2) **Start the server**
 
 ```bash
 python server.py
 ```
 
-2) Edit Claude Desktop's config file (per OS):
+3) **Configure Claude Desktop**
 
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+Edit Claude Desktop's config file (location depends on your OS):
 
-3) Add an MCP server entry:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add an MCP server entry:
 
 ```json
 {
@@ -181,33 +183,95 @@ python server.py
       "type": "http",
       "transport": "streamable-http",
       "url": "http://127.0.0.1:8000",
-      "description": "Local WebSearch MCP server (Auth0 + Tavily)"
+      "description": "Local WebSearch MCP server with Tavily and local token authentication"
     }
   }
 }
 ```
 
-4) In Claude, authenticate the session:
-- After Claude connects to the server, it will discover the available tools. Ask Claude: "Run the `authenticate` tool" or use the Tools panel to execute `authenticate`.
-- On success, you should see a confirmation like:
-  - `✅ Autenticación exitosa!` with details about audience/expiration.
-- If you skip this step, `web_search` will return an error telling you to authenticate first.
+**Important notes:**
+- You do NOT need to provide the `LOCAL_TOKEN` in the Claude Desktop configuration
+- The token is stored securely in the server's `.env` file and never exposed to clients
+- Authentication is handled through the `authenticate` tool call
 
-5) Use `web_search`:
-- Ask Claude to run: `web_search` with arguments, for example: `query="what is the latest news on MPC servers?", max_results=3`.
-- You can also ask in natural language, e.g., "Search the web for the latest news on MPC servers using the web_search tool" and Claude will call it.
+4) **Restart Claude Desktop**
 
-Notes:
-- Claude Desktop 0.7+ supports `streamable-http` and automatically sets the required `mcp-session-id` header.
-- The server organizes requests by `{session_id}` in the URL path (e.g., `POST /mcp/{session_id}`); Claude sets this automatically when establishing the session.
-- If you changed the host/port in `config.py`, update the `url` accordingly.
-- Authentication uses Auth0 Client Credentials defined in your environment (`AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_AUDIENCE`). The token is fetched by the server and stored in the current session.
-- You can validate any JWT manually via the `validate_token` tool if needed.
+After saving the configuration, restart Claude Desktop to load the new MCP server.
 
-Troubleshooting:
-- 401 or an error asking to authenticate: run the `authenticate` tool first.
-- Missing or invalid Auth0 settings: ensure the required env vars are set before starting the server.
-- No results or Tavily errors: verify `TAVILY_API_KEY` and network connectivity.
+### Usage Workflow
+
+Once Claude Desktop is connected to the server, follow this workflow:
+
+**Step 1: Authenticate the session**
+
+The first time you want to use web search in a conversation, you must authenticate:
+
+- Ask Claude: **"Please authenticate using the authenticate tool"** or **"Run the authenticate tool"**
+- Alternatively, use the Tools panel in Claude Desktop to manually execute the `authenticate` tool
+- **No arguments are required** — the server automatically uses the `LOCAL_TOKEN` from its configuration
+
+On success, you'll see:
+```
+✅ Autenticación exitosa!
+
+Token local válido.
+Tipo: local_token
+```
+
+**Step 2: Use web search**
+
+After authentication, you can use the `web_search` tool:
+
+- Ask in natural language: **"Search the web for the latest Python FastAPI tutorials"**
+- Or explicitly: **"Use web_search to find information about MCP servers, limit to 5 results"**
+- Claude will automatically call `web_search` with appropriate parameters
+
+Example arguments for `web_search`:
+- `query` (required): search query string
+- `max_results` (optional, default: 5): number of results to return
+- `search_depth` (optional, default: "basic"): either "basic" or "advanced"
+
+### How Authentication Works
+
+This server implements a simplified local token authentication system:
+
+1. The `LOCAL_TOKEN` is stored in the server's `.env` file (server-side only)
+2. When you call the `authenticate` tool (with no arguments), the server:
+   - Retrieves the `LOCAL_TOKEN` from its configuration
+   - Validates the token internally
+   - Stores the authentication state in your session
+3. The actual token value is never sent to or required from the client
+4. Once authenticated, your session can use `web_search` until it expires (default: 1 hour)
+
+### Additional Tools
+
+- **`validate_token`**: Manually validate a token string (requires `token` argument). Useful for testing.
+
+### Technical Notes
+
+- Claude Desktop 0.7+ supports `streamable-http` and automatically manages session IDs via the `mcp-session-id` header
+- The server organizes requests by `{session_id}` in the URL path (e.g., `POST /mcp/{session_id}`)
+- If you changed `MCP_SERVER_HOST` or `MCP_SERVER_PORT` in your `.env`, update the `url` in Claude Desktop config accordingly
+- Sessions expire after `SESSION_TIMEOUT` seconds (default: 3600 = 1 hour)
+
+### Troubleshooting
+
+**Authentication errors:**
+- **Error: "Debe autenticarse primero"** → You haven't called the `authenticate` tool yet. Run it first before using `web_search`.
+- **Error: "No se pudo obtener token local"** → The server's `LOCAL_TOKEN` is not configured in `.env`. Check your environment variables.
+- **Error: "Token obtenido pero no es válido"** → The `LOCAL_TOKEN` format is invalid. Regenerate it using the command from the Configuration section.
+
+**Connection errors:**
+- **Claude Desktop doesn't see the server** → Verify the server is running (`python server.py`) and the URL in the config matches your `MCP_SERVER_HOST:MCP_SERVER_PORT`.
+- **404 errors** → Check that you're using the correct URL format (`http://127.0.0.1:8000` or `http://localhost:8000`).
+
+**Search errors:**
+- **Tavily API errors** → Verify `TAVILY_API_KEY` is set correctly and you have network connectivity.
+- **Empty results** → Try a different query or increase `max_results`.
+
+**Session issues:**
+- **Authentication lost** → Sessions expire after `SESSION_TIMEOUT`. Simply run `authenticate` again.
+- **Stale session** → Delete and recreate by restarting Claude Desktop or waiting for automatic cleanup.
 
 ## Testing
 
@@ -224,22 +288,19 @@ python tests/test_project_metadata.py -v
 
 Tips for writing tests:
 
-- Keep tests pure and fast; avoid real Tavily or Auth0 calls.
+- Keep tests pure and fast; avoid real Tavily calls.
 - If a test imports `config.py` or `server.py`, set required env values in-process before import to avoid using real secrets:
 
 ```python
 import os
-os.environ["AUTH0_DOMAIN"] = "example.auth0.com"
-os.environ["AUTH0_CLIENT_ID"] = "dummy"
-os.environ["AUTH0_CLIENT_SECRET"] = "dummy"
-os.environ["AUTH0_AUDIENCE"] = "https://api.example"
+os.environ["LOCAL_TOKEN"] = "test-token-dummy"
 os.environ["TAVILY_API_KEY"] = "dummy"
 
 import config  # safe after env vars are set
 import server
 ```
 
-- To test behavior that touches `TavilyClient` or Auth0 HTTP calls, patch them:
+- To test behavior that touches `TavilyClient`, patch it:
 
 ```python
 from unittest.mock import patch
@@ -266,7 +327,7 @@ def test_web_search_mocked(client_cls):
 ```bash
 python -m venv .venv && source .venv/bin/activate
 python -m pip install -U pip
-python -m pip install authlib fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
+python -m pip install fastapi httpx loguru "mcp[cli]" python-decouple rich sse-starlette tavily-python "uvicorn[standard]"
 ```
 
 - Configure env: create `.env` with required settings (see example above)
@@ -304,8 +365,8 @@ websearch-mcp-server/
 
 ## Troubleshooting
 
-- ImportError for `fastapi`, `authlib`, `loguru`, etc.: dependencies not installed — re-run the install step.
-- 401/permission issues when calling `web_search`: ensure you called the `authenticate` tool first and that Auth0 credentials are correct.
+- ImportError for `fastapi`, `loguru`, etc.: dependencies not installed — re-run the install step.
+- 401/permission issues when calling `web_search`: ensure you called the `authenticate` tool first and that LOCAL_TOKEN is correctly configured.
 - 404 for `/session/{id}/status`: session not yet created; it is created on first `/mcp/{id}` or `/sse/{id}` call.
 - Tavily-related errors: verify `TAVILY_API_KEY` and network connectivity.
 

@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.0.0] - 2025-10-26
+
+### Changed
+- **BREAKING**: Replaced Auth0 authentication with local token system. Authentication now uses a simple `LOCAL_TOKEN` stored in `.env` instead of Auth0 Client Credentials flow.
+- Simplified `auth.py`: replaced `Auth0Client` and `Auth0Validator` with `LocalTokenClient` and `LocalTokenValidator`.
+- Updated `config.py`: removed Auth0-related configuration variables (`AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_AUDIENCE`, `AUTH0_ALGORITHM`) and added `LOCAL_TOKEN`.
+- Updated authentication flow: `authenticate` tool now returns the local token instead of fetching from Auth0.
+- Updated `validate_token` tool to perform simple string comparison instead of JWT validation.
+
+### Removed
+- Dependency: removed `authlib` (no longer needed for local token authentication).
+- Auth0 integration: all Auth0-specific code and configuration removed.
+
+### Added
+- Token generation guide: documentation now includes command to generate secure tokens using Python's `secrets` module.
+
+### Migration Guide
+- Remove all `AUTH0_*` variables from your `.env` file.
+- Generate a secure token: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- Add `LOCAL_TOKEN=<your_generated_token>` to your `.env` file.
+- Update dependencies: remove `authlib` if manually installed.
+
+> SemVer: major release (breaking changes to authentication system).
+
 ## [0.2.0] - 2025-10-25
 
 ### Added

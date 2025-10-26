@@ -151,7 +151,7 @@ async def main():
         await client.get_session_status()
 
         # 4. Autenticar
-        log_section("4. Autenticando con Auth0", "cyan")
+        log_section("4. Autenticando con Token Local", "cyan")
         await client.call_tool("authenticate")
 
         # 5. Estado después de autenticar
@@ -173,7 +173,7 @@ async def main():
         log_section("PRUEBAS COMPLETADAS ✓", "bold green")
 
     except Exception as e:
-        log.exception("Error durante las pruebas")
+        log.exception(f"Error durante las pruebas: {e}")
         log_section("PRUEBAS FALLIDAS ✗", "bold red")
     finally:
         await client.close()

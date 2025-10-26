@@ -22,7 +22,7 @@ from logger import (
     log_panel,
     LogContext
 )
-from auth import Auth0Validator, Auth0Client
+from auth import LocalTokenValidator, LocalTokenClient
 
 
 class SessionManager:
@@ -95,12 +95,12 @@ class SessionManager:
 
 
 class MCPServerSSE:
-    """Servidor MCP con Auth0, Tavily y transporte SSE"""
+    """Servidor MCP con autenticación local, Tavily y transporte SSE"""
 
     def __init__(self):
-        self.mcp_server = Server("mcp-auth0-tavily-server")
-        self.auth_validator = Auth0Validator()
-        self.auth_client = Auth0Client()
+        self.mcp_server = Server("mcp-websearch-server")
+        self.auth_validator = LocalTokenValidator()
+        self.auth_client = LocalTokenClient()
         self.tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
         self.session_manager = SessionManager()
 
@@ -119,7 +119,7 @@ class MCPServerSSE:
             return [
                 Tool(
                     name="authenticate",
-                    description="Autentica el servidor con Auth0 usando Client Credentials",
+                    description="Autentica la sesión usando el token local configurado en el servidor",
                     inputSchema={
                         "type": "object",
                         "properties": {},
@@ -153,13 +153,13 @@ class MCPServerSSE:
                 ),
                 Tool(
                     name="validate_token",
-                    description="Valida un token JWT de Auth0",
+                    description="Valida un token local comparándolo con el token configurado en el servidor",
                     inputSchema={
                         "type": "object",
                         "properties": {
                             "token": {
                                 "type": "string",
-                                "description": "Token JWT a validar"
+                                "description": "Token local a validar"
                             }
                         },
                         "required": ["token"]
@@ -213,7 +213,7 @@ class MCPServerSSE:
         return session.get("authenticated", False)
 
     async def _authenticate(self, session_id: Optional[str]) -> List[TextContent]:
-        """Autentica usando Auth0 Client Credentials Flow"""
+        """Autentica usando el token local configurado"""
         with LogContext("AUTENTICACIÓN", "yellow"):
             try:
                 log.info(f"Iniciando autenticación para sesión: {session_id}")
@@ -221,10 +221,10 @@ class MCPServerSSE:
                 token = self.auth_client.get_token()
 
                 if not token:
-                    log.error("No se pudo obtener token de Auth0")
+                    log.error("No se pudo obtener token local")
                     return [TextContent(
                         type="text",
-                        text="❌ Error al obtener token de Auth0. Verifica tus credenciales."
+                        text="❌ Error al obtener token local. Verifica la configuración."
                     )]
 
                 log.debug("Token obtenido, procediendo a validar...")
@@ -254,21 +254,19 @@ class MCPServerSSE:
                 return [TextContent(
                     type="text",
                     text=f"✅ Autenticación exitosa!\n\n"
-                         f"Token válido para:\n"
-                         f"- Audience: {payload.get('aud')}\n"
-                         f"- Expira en: {payload.get('exp')}\n"
-                         f"- Scopes: {payload.get('scope', 'N/A')}"
+                         f"Token local válido.\n"
+                         f"Tipo: {payload.get('type')}"
                 )]
 
             except Exception as e:
-                log.exception(f"Error durante la autenticación")
+                log.exception(f"Error durante la autenticación: {e}")
                 return [TextContent(
                     type="text",
                     text=f"❌ Error durante la autenticación: {str(e)}"
                 )]
 
     async def _validate_token(self, token: str) -> List[TextContent]:
-        """Valida un token JWT"""
+        """Valida un token local"""
         if not token:
             log.warning("Intento de validación sin token")
             return [TextContent(
@@ -276,25 +274,21 @@ class MCPServerSSE:
                 text="❌ Token no proporcionado"
             )]
 
-        payload = self.auth_validator.validate_token(token)
+        payload =  self.auth_validator.validate_token(token)
 
         if payload:
             log.info("Token validado exitosamente")
             return [TextContent(
                 type="text",
                 text=f"✅ Token válido\n\n"
-                     f"Claims:\n"
-                     f"- Issuer: {payload.get('iss')}\n"
-                     f"- Audience: {payload.get('aud')}\n"
-                     f"- Subject: {payload.get('sub')}\n"
-                     f"- Expiration: {payload.get('exp')}\n"
-                     f"- Scopes: {payload.get('scope', 'N/A')}"
+                     f"Tipo: {payload.get('type')}\n"
+                     f"Válido: {payload.get('valid')}"
             )]
         else:
-            log.warning("Token inválido o expirado")
+            log.warning("Token inválido")
             return [TextContent(
                 type="text",
-                text="❌ Token inválido o expirado"
+                text="❌ Token inválido"
             )]
 
     async def _web_search(
@@ -343,7 +337,7 @@ class MCPServerSSE:
                     )]
 
             except Exception as e:
-                log.exception(f"Error en la búsqueda")
+                log.exception(f"Error en la búsqueda: {e}")
                 return [TextContent(
                     type="text",
                     text=f"❌ Error en la búsqueda: {str(e)}"
@@ -530,7 +524,7 @@ async def handle_mcp_request(session_id: str, request: Request):
             }, status_code=400)
 
     except Exception as e:
-        log.exception(f"Error procesando petición MCP")
+        log.exception(f"Error procesando petición MCP: {e}")
         return JSONResponse({
             "jsonrpc": "2.0",
             "id": body.get('id') if 'body' in locals() else None,

@@ -5,12 +5,8 @@ from typing import Optional
 class Settings:
     """Configuración centralizada de la aplicación"""
 
-    # Auth0 Configuration
-    AUTH0_DOMAIN: str = config('AUTH0_DOMAIN')
-    AUTH0_CLIENT_ID: str = config('AUTH0_CLIENT_ID')
-    AUTH0_CLIENT_SECRET: str = config('AUTH0_CLIENT_SECRET')
-    AUTH0_AUDIENCE: str = config('AUTH0_AUDIENCE')
-    AUTH0_ALGORITHM: str = config('AUTH0_ALGORITHM', default='RS256')
+    # Local Token Configuration
+    LOCAL_TOKEN: str = config('LOCAL_TOKEN')
 
     # Tavily Configuration
     TAVILY_API_KEY: str = config('TAVILY_API_KEY')
@@ -33,10 +29,7 @@ class Settings:
     def validate(cls):
         """Valida que todas las configuraciones requeridas estén presentes"""
         required_fields = [
-            'AUTH0_DOMAIN',
-            'AUTH0_CLIENT_ID',
-            'AUTH0_CLIENT_SECRET',
-            'AUTH0_AUDIENCE',
+            'LOCAL_TOKEN',
             'TAVILY_API_KEY'
         ]
 
