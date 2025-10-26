@@ -1,32 +1,52 @@
-"""
-Application configuration loaded from environment variables and the local .env file.
+from decouple import config
+from typing import Optional
 
-This module uses python-decouple to read settings. By default, python-decouple will
-look for values in the OS environment and then in a .env file at the project root.
 
-Usage:
-    from config import TAVILY_API
+class Settings:
+    """Configuración centralizada de la aplicación"""
 
-    # example: use the key with a client
-    # client = TavilyClient(api_key=TAVILY_API)
+    # Auth0 Configuration
+    AUTH0_DOMAIN: str = config('AUTH0_DOMAIN')
+    AUTH0_CLIENT_ID: str = config('AUTH0_CLIENT_ID')
+    AUTH0_CLIENT_SECRET: str = config('AUTH0_CLIENT_SECRET')
+    AUTH0_AUDIENCE: str = config('AUTH0_AUDIENCE')
+    AUTH0_ALGORITHM: str = config('AUTH0_ALGORITHM', default='RS256')
 
-Add more settings here as your project grows, for example:
-    DEBUG: bool = _config('DEBUG', default=False, cast=bool)
-    ALLOWED_HOSTS: list[str] = _config('ALLOWED_HOSTS', default='', cast=Csv())
-"""
-from __future__ import annotations
+    # Tavily Configuration
+    TAVILY_API_KEY: str = config('TAVILY_API_KEY')
 
-from decouple import config as _config, Csv
+    # Server Configuration
+    MCP_SERVER_HOST: str = config('MCP_SERVER_HOST', default='0.0.0.0')
+    MCP_SERVER_PORT: int = config('MCP_SERVER_PORT', default=8000, cast=int)
 
-# Required settings
-TAVILY_API: str = _config('tavily_api')  # from .env or environment; raises if missing
+    # Logging Configuration
+    LOG_LEVEL: str = config('LOG_LEVEL', default='INFO')
+    LOG_FILE: str = config('LOG_FILE', default='logs/mcp_server.log')
+    LOG_ROTATION: str = config('LOG_ROTATION', default='10 MB')
+    LOG_RETENTION: str = config('LOG_RETENTION', default='7 days')
 
-# Example optional settings (uncomment and use as needed)
-# DEBUG: bool = _config('DEBUG', default=False, cast=bool)
-# ALLOWED_HOSTS: list[str] = _config('ALLOWED_HOSTS', default='', cast=Csv())
+    # Session Configuration
+    SESSION_TIMEOUT: int = config('SESSION_TIMEOUT', default=3600, cast=int)
+    SESSION_CLEANUP_INTERVAL: int = config('SESSION_CLEANUP_INTERVAL', default=300, cast=int)
 
-__all__ = [
-    'TAVILY_API',
-    # 'DEBUG',
-    # 'ALLOWED_HOSTS',
-]
+    @classmethod
+    def validate(cls):
+        """Valida que todas las configuraciones requeridas estén presentes"""
+        required_fields = [
+            'AUTH0_DOMAIN',
+            'AUTH0_CLIENT_ID',
+            'AUTH0_CLIENT_SECRET',
+            'AUTH0_AUDIENCE',
+            'TAVILY_API_KEY'
+        ]
+
+        missing = []
+        for field in required_fields:
+            if not getattr(cls, field, None):
+                missing.append(field)
+
+        if missing:
+            raise ValueError(f"Faltan configuraciones requeridas: {', '.join(missing)}")
+
+
+settings = Settings()
